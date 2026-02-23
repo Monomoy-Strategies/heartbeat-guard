@@ -11,7 +11,7 @@ def get_version():
         for line in f:
             if line.startswith("__version__"):
                 return line.split('"')[1]
-    return "1.0.0"
+    return "1.1.0"
 
 setup(
     name="heartbeat-guard",

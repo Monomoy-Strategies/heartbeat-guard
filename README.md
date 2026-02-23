@@ -4,7 +4,7 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![OpenClaw Compatible](https://img.shields.io/badge/OpenClaw-compatible-orange.svg)](https://openclaw.com)
+[![OpenClaw Compatible](https://img.shields.io/badge/OpenClaw-2026.2.22%2B-orange.svg)](https://openclaw.com)
 [![Built by Monomoy Strategies](https://img.shields.io/badge/Built%20by-Monomoy%20Strategies-red.svg)](https://monomoystrategies.com)
 
 **Your AI Agent's Security Watchdog** 🛡️
@@ -13,18 +13,33 @@ HeartbeatGuard is a comprehensive security monitoring system designed specifical
 
 ## 🚀 Features
 
-HeartbeatGuard performs **10 comprehensive security checks**:
+HeartbeatGuard performs **22 core security checks**:
 
-1. **🔥 Firewall Status Monitoring** - Real-time firewall rule analysis and breach detection
-2. **🔍 Port Scanning & Analysis** - Monitors open ports and detects unauthorized services  
-3. **🔐 SSL Certificate Health** - Tracks certificate expiration and validation
-4. **🚨 Failed Login Detection** - Identifies brute force attacks and suspicious login attempts
-5. **⚡ Process Monitoring** - Detects suspicious and unauthorized processes
-6. **📁 File Integrity Checking** - Monitors critical files for unauthorized changes
-7. **🔑 Credential Rotation Tracking** - Ensures security credentials are properly rotated
-8. **🛡️ CVE & Vulnerability Scanning** - Checks for known vulnerabilities and security patches
-9. **📊 Anomaly Detection** - AI-powered behavioral analysis for threat identification
-10. **🔍 Skill Code Safety Scanning** - Monitors OpenClaw skills for malicious code patterns
+1. **💻 System Health Monitoring** - CPU, memory, disk, and load tracking
+2. **🔥 Firewall Status Monitoring** - Real-time firewall rule analysis and breach detection
+3. **🔍 Port Scanning & Analysis** - Monitors open ports and detects unauthorized services  
+4. **🔐 SSL Certificate Health** - Tracks certificate expiration and validation
+5. **🚨 Failed Login Detection** - Identifies brute force attacks and suspicious login attempts
+6. **⚡ Process Monitoring** - Detects suspicious and unauthorized processes
+7. **📁 File Integrity Checking** - Monitors critical files for unauthorized changes
+8. **🔑 Credential Rotation Tracking** - Ensures security credentials are properly rotated
+9. **🛡️ CVE & Vulnerability Scanning** - Checks for known vulnerabilities and security patches
+10. **📊 Anomaly Detection** - AI-powered behavioral analysis for threat identification
+11. **🔍 Skill Code Safety Scanning** - Monitors OpenClaw skills for malicious code patterns
+12. **🧾 Sysmon / Audit Log Review** - Detects suspicious process and file events
+13. **🧯 Command Audit** - Scans OpenClaw exec logs for risky commands
+14. **🌐 Outbound Connection Monitoring** - Flags unexpected external connections
+15. **🛡️ Tamper Detection** - Hashes HeartbeatGuard/OpenClaw files for drift
+
+### 🆕 OpenClaw 2026.2.22 Security Checks (v1.2.0+)
+
+16. **🔀 PATH Binary Shadowing** — Detects `safeBins` entries without `safeBinTrustedDirs`, enabling PATH-hijack attacks (HIGH)
+17. **⚠️ Dangerous Config Flags** — Detects `dangerouslyDisableDeviceAuth=true` and other dangerous gateway flags (CRITICAL)
+18. **🔓 Insecure ws:// Remote Connections** — Flags non-loopback unencrypted WebSocket gateway remotes (HIGH)
+19. **👥 Open Group Policies** — Detects groups with exec/filesystem tools enabled but no sandbox restrictions (HIGH)
+20. **🔢 OpenClaw Version Gate** — Flags installs below 2026.2.22 due to unpatched exec env injection, shell bypass, and symlink escape vulnerabilities (MEDIUM)
+21. **🔑 Credential Leakage in Config** — Warns when pre-2026.2.22 debug serialization may expose API keys in logs (MEDIUM)
+22. **⚡ IPv4/IPv6 Rate Limit Bypass** — Flags dual-stack gateway configs on pre-2026.2.22 installs vulnerable to rate limit evasion (MEDIUM)
 
 ## 📦 Installation
 
@@ -69,6 +84,10 @@ heartbeat-guard --check ports
 heartbeat-guard --check ssl
 heartbeat-guard --check logins
 heartbeat-guard --check creds
+heartbeat-guard --check sysmon
+heartbeat-guard --check audit
+heartbeat-guard --check outbound
+heartbeat-guard --check tamper
 
 # Show current security status
 heartbeat-guard --status
@@ -122,6 +141,16 @@ HeartbeatGuard uses a simple JSON configuration system:
 ```
 
 Configuration file location: `~/clawd/data/heartbeat-guard-config.json`
+
+## 📋 OpenClaw Version Compatibility
+
+| OpenClaw Version | HeartbeatGuard Support | Notes |
+|-----------------|----------------------|-------|
+| **2026.2.22+** | ✅ Full (all 22 checks) | **Recommended minimum** — patches exec env injection, shell bypass, symlink escape, rate limit bypass, and credential leakage |
+| 2026.2.21 – 2026.2.19 | ⚠️ Partial (checks 1–15 only) | Missing 2026.2.22 security patches — update recommended |
+| < 2026.2.19 | ❌ Limited | Multiple unpatched vulnerabilities — update immediately |
+
+> **⚠️ Recommendation:** Run OpenClaw **2026.2.22 or later**. Versions prior to 2026.2.22 are flagged as MEDIUM risk by HeartbeatGuard due to unpatched exec environment injection vulnerabilities, shell line-continuation bypass, and symlink escape in webhook transforms.
 
 ## 🤖 Built for OpenClaw
 

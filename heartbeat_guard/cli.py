@@ -15,6 +15,10 @@ Usage:
     heartbeat-guard --check ssl
     heartbeat-guard --check logins
     heartbeat-guard --check creds
+    heartbeat-guard --check sysmon
+    heartbeat-guard --check audit
+    heartbeat-guard --check outbound
+    heartbeat-guard --check tamper
 
     # Show last scan results
     heartbeat-guard --status
@@ -47,6 +51,10 @@ from .scanner import (
     check_credential_rotation,
     check_cve_updates,
     check_anomalies,
+    check_sysmon_logs,
+    check_command_audit,
+    check_outbound_connections,
+    check_tamper_detection,
     generate_security_report,
     load_state,
     ensure_data_files
@@ -72,13 +80,17 @@ def run_individual_check(check_type: str, **kwargs):
         'health': check_system_health,
         'firewall': check_firewall_status,
         'ports': check_open_ports,
-        'ssl': lambda: check_ssl_certs(kwargs.get('domains', ['monomoystrategies.com', 'openclawhq.ai', 'jasper-hq.vercel.app'])),
+        'ssl': lambda: check_ssl_certs(kwargs.get('domains')),
         'logins': check_failed_logins,
         'processes': check_suspicious_processes,
         'files': check_file_integrity,
         'creds': check_credential_rotation,
         'updates': check_cve_updates,
-        'anomalies': check_anomalies
+        'anomalies': check_anomalies,
+        'sysmon': check_sysmon_logs,
+        'audit': check_command_audit,
+        'outbound': check_outbound_connections,
+        'tamper': check_tamper_detection
     }
     
     if check_type not in check_functions:
@@ -276,7 +288,8 @@ Examples:
     # Individual check options
     parser.add_argument('--check', choices=[
         'health', 'firewall', 'ports', 'ssl', 'logins', 
-        'processes', 'files', 'creds', 'updates', 'anomalies'
+        'processes', 'files', 'creds', 'updates', 'anomalies',
+        'sysmon', 'audit', 'outbound', 'tamper'
     ], help='Run specific security check')
     
     # SSL check domains
