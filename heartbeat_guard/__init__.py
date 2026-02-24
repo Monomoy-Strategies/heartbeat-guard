@@ -9,7 +9,7 @@ Website: https://heartbeatguard.com
 License: MIT
 """
 
-__version__ = "1.2.0"  # 2026.2.22: Added 7 new security checks for OpenClaw 2026.2.22
+__version__ = "1.3.0"  # 2026.2.23: Added 3 new security checks for OpenClaw 2026.2.23
 __author__ = "Monomoy Strategies"
 __email__ = "bsifflard@monomoystrategies.com"
 

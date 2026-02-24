@@ -2300,6 +2300,298 @@ def check_openclaw_version_gate() -> Dict[str, Any]:
     }
 
 
+
+# ---------------------------------------------------------------------------
+# OpenClaw 2026.2.23 Security Checks
+# These checks detect vulnerabilities patched in OpenClaw 2026.2.23 and flag
+# misconfigurations introduced or newly visible in that release.
+# ---------------------------------------------------------------------------
+
+OPENCLAW_MIN_SAFE_VERSION_223 = (2026, 2, 23)
+OPENCLAW_MIN_SAFE_VERSION_STR_223 = "2026.2.23"
+
+
+def check_ssrf_legacy_key() -> Dict[str, Any]:
+    """
+    OpenClaw 2026.2.23 Check — SSRF Legacy Config Key (CRITICAL)
+
+    Detects stale ``browser.ssrfPolicy.allowPrivateNetwork: true`` — the old
+    key that was renamed to ``browser.ssrfPolicy.dangerouslyAllowPrivateNetwork``
+    in OpenClaw 2026.2.23 as part of the SSRF hardening pass.
+
+    If a user ran `openclaw doctor --fix` the key will have been migrated.
+    If not, the SSRF private-network allow is silently NOT applied by OpenClaw
+    (the new key is what the runtime reads), so the user believes private-network
+    browsing is permitted but the protection gate is actually closed — or vice
+    versa depending on their intent.
+
+    Either way this is a misconfiguration that needs human attention.
+    Runs in: light + full scan.
+    """
+    findings = []
+    warnings = []
+    critical = []
+
+    try:
+        configs = _load_openclaw_configs()
+
+        if not configs:
+            findings.append(
+                "SSRF legacy key: No OpenClaw config found — check skipped"
+            )
+            return {
+                "category": "ssrf_legacy_key",
+                "findings": findings,
+                "warnings": warnings,
+                "critical": critical,
+            }
+
+        for cfg in configs:
+            source = cfg.get("__source__", "unknown config")
+            legacy_val = _deep_search(cfg, "browser.ssrfPolicy.allowPrivateNetwork")
+
+            if legacy_val is not None:
+                # The old key still exists — it's ignored by 2026.2.23+ runtime
+                if legacy_val is True:
+                    critical.append(
+                        f"CRITICAL: Stale SSRF key 'browser.ssrfPolicy.allowPrivateNetwork=true' "
+                        f"found in {source}. This key was renamed to "
+                        f"'browser.ssrfPolicy.dangerouslyAllowPrivateNetwork' in OpenClaw 2026.2.23. "
+                        f"The legacy key is IGNORED by the runtime — SSRF private-network access "
+                        f"is NOT active even though your config says it is. "
+                        f"Run 'openclaw doctor --fix' to migrate the key."
+                    )
+                else:
+                    # false / null — less dangerous but still stale
+                    warnings.append(
+                        f"Stale SSRF key 'browser.ssrfPolicy.allowPrivateNetwork={legacy_val}' "
+                        f"found in {source}. Renamed to "
+                        f"'browser.ssrfPolicy.dangerouslyAllowPrivateNetwork' in 2026.2.23. "
+                        f"Run 'openclaw doctor --fix' to clean up your config."
+                    )
+            else:
+                # Check the new key is present if desired
+                new_val = _deep_search(cfg, "browser.ssrfPolicy.dangerouslyAllowPrivateNetwork")
+                if new_val is True:
+                    findings.append(
+                        f"SSRF legacy key: New key 'dangerouslyAllowPrivateNetwork=true' "
+                        f"correctly set in {source} — OK (private-network browsing explicitly allowed)"
+                    )
+                else:
+                    findings.append(
+                        f"SSRF legacy key: No legacy SSRF key found in {source} — OK"
+                    )
+
+        if not critical and not warnings and configs:
+            findings.append(
+                "SSRF legacy key: No stale 'allowPrivateNetwork' key detected — OK"
+            )
+
+    except Exception as e:
+        warnings.append(f"SSRF legacy key check failed: {str(e)}")
+
+    return {
+        "category": "ssrf_legacy_key",
+        "findings": findings,
+        "warnings": warnings,
+        "critical": critical,
+    }
+
+
+def check_hsts_missing_for_public_gateway() -> Dict[str, Any]:
+    """
+    OpenClaw 2026.2.23 Check — HSTS Missing for Public Gateway (MEDIUM)
+
+    If ``gateway.bind`` is NOT a loopback address (i.e. the gateway is
+    public-facing) AND HTTPS appears to be in use (port 443, or 'https' in
+    the bind/listen config) AND
+    ``gateway.http.securityHeaders.strictTransportSecurity`` is not configured,
+    flag it as a MEDIUM finding.
+
+    Strict-Transport-Security (HSTS) is a new optional hardening header added
+    in OpenClaw 2026.2.23 that prevents browsers and clients from downgrading
+    TLS connections to plain HTTP.
+
+    Runs in: full scan only.
+    """
+    findings = []
+    warnings = []
+    critical = []
+
+    _loopback_hosts = {"127.0.0.1", "::1", "localhost", "0.0.0.0"}
+
+    def _is_public_bind(bind_str: str) -> bool:
+        """Return True if bind address suggests a public/non-loopback deployment."""
+        if not bind_str or not isinstance(bind_str, str):
+            return False
+        host = bind_str.split(":")[0].strip().lower()
+        return host not in _loopback_hosts
+
+    def _https_in_use(cfg: Dict) -> bool:
+        """Heuristic: HTTPS is in use if port 443, tls/ssl config, or 'https' in listen."""
+        tls = _deep_search(cfg, "gateway.tls") or _deep_search(cfg, "gateway.ssl")
+        if tls:
+            return True
+        port = _deep_search(cfg, "gateway.port") or _deep_search(cfg, "gateway.http.port")
+        if port and str(port) == "443":
+            return True
+        listen = _deep_search(cfg, "gateway.listen") or ""
+        if "https" in str(listen).lower():
+            return True
+        return False
+
+    try:
+        configs = _load_openclaw_configs()
+
+        if not configs:
+            findings.append(
+                "HSTS check: No OpenClaw config found — check skipped"
+            )
+            return {
+                "category": "hsts_missing_for_public_gateway",
+                "findings": findings,
+                "warnings": warnings,
+                "critical": critical,
+            }
+
+        for cfg in configs:
+            source = cfg.get("__source__", "unknown config")
+            bind_addr = (
+                _deep_search(cfg, "gateway.bind")
+                or _deep_search(cfg, "gateway.host")
+                or ""
+            )
+
+            is_public = _is_public_bind(str(bind_addr))
+            https_active = _https_in_use(cfg)
+            hsts_val = _deep_search(
+                cfg, "gateway.http.securityHeaders.strictTransportSecurity"
+            )
+
+            if is_public and https_active and not hsts_val:
+                warnings.append(
+                    f"HSTS not configured for public-facing HTTPS gateway in {source}. "
+                    f"gateway.bind='{bind_addr}' appears non-loopback and HTTPS is in use, "
+                    f"but 'gateway.http.securityHeaders.strictTransportSecurity' is not set. "
+                    f"Add HSTS header (introduced in OpenClaw 2026.2.23) to prevent TLS "
+                    f"downgrade attacks: set 'max-age=31536000; includeSubDomains'."
+                )
+            elif is_public and https_active and hsts_val:
+                findings.append(
+                    f"HSTS configured for public gateway in {source} — OK (value: '{hsts_val}')"
+                )
+            elif not is_public:
+                findings.append(
+                    f"HSTS check: Gateway is loopback/private in {source} — HSTS not required"
+                )
+            else:
+                findings.append(
+                    f"HSTS check: HTTPS not detected in {source} — HSTS not applicable"
+                )
+
+        if not warnings and not critical and configs:
+            findings.append(
+                "HSTS check: No public HTTPS gateways missing HSTS detected — OK"
+            )
+
+    except Exception as e:
+        warnings.append(f"HSTS missing check failed: {str(e)}")
+
+    return {
+        "category": "hsts_missing_for_public_gateway",
+        "findings": findings,
+        "warnings": warnings,
+        "critical": critical,
+    }
+
+
+def check_openclaw_version_gate_223() -> Dict[str, Any]:
+    """
+    OpenClaw 2026.2.23 Version Gate (MEDIUM)
+
+    Bumps the version gate: flags installs below 2026.2.23 for two issues
+    introduced or confirmed in that release:
+
+    1. **SSRF policy default change** — The key ``browser.ssrfPolicy.allowPrivateNetwork``
+       was renamed to ``browser.ssrfPolicy.dangerouslyAllowPrivateNetwork``. Users on
+       older installs who relied on the legacy key have SSRF protection silently broken.
+
+    2. **Config snapshot redaction bypass** — In versions prior to 2026.2.23, debug logs
+       could expose ``env.*`` and ``skills.env.*`` config keys (e.g. API keys, tokens)
+       in plaintext. OpenClaw 2026.2.23 adds automatic redaction of these key families
+       from all log/snapshot outputs.
+
+    Runs in: light + full scan.
+    """
+    findings = []
+    warnings = []
+    critical = []
+
+    try:
+        version = _get_openclaw_installed_version()
+
+        if version is None:
+            warnings.append(
+                f"OpenClaw 2026.2.23 version gate: Cannot determine installed version. "
+                f"Recommended minimum is {OPENCLAW_MIN_SAFE_VERSION_STR_223}. "
+                "Ensure OpenClaw is installed and accessible via PATH or npm."
+            )
+            return {
+                "category": "openclaw_version_gate_223",
+                "findings": findings,
+                "warnings": warnings,
+                "critical": critical,
+            }
+
+        parsed = _parse_version(version)
+        below_223 = (parsed is None) or (parsed < OPENCLAW_MIN_SAFE_VERSION_223)
+
+        if below_223:
+            base_msg = (
+                f"OpenClaw version {version} is below the recommended minimum "
+                f"{OPENCLAW_MIN_SAFE_VERSION_STR_223}."
+            )
+            # SSRF policy default change
+            warnings.append(
+                f"{base_msg} "
+                f"SSRF POLICY CHANGE: 'browser.ssrfPolicy.allowPrivateNetwork' was renamed "
+                f"to 'browser.ssrfPolicy.dangerouslyAllowPrivateNetwork' in 2026.2.23. "
+                f"Your SSRF private-network policy may be silently inactive. "
+                f"Run 'openclaw doctor --fix' after upgrading."
+            )
+            # Config snapshot redaction bypass
+            warnings.append(
+                f"CONFIG REDACTION BYPASS (version {version} < {OPENCLAW_MIN_SAFE_VERSION_STR_223}): "
+                f"env.* and skills.env.* config keys (API keys, tokens, secrets) may be "
+                f"exposed in plaintext in debug logs and config snapshots. "
+                f"Avoid running the gateway in debug/verbose mode until you upgrade to "
+                f"{OPENCLAW_MIN_SAFE_VERSION_STR_223}+."
+            )
+        else:
+            findings.append(
+                f"OpenClaw version {version} meets or exceeds the recommended "
+                f"minimum {OPENCLAW_MIN_SAFE_VERSION_STR_223} — OK"
+            )
+            findings.append(
+                f"SSRF policy key migration (dangerouslyAllowPrivateNetwork): "
+                f"present in this version."
+            )
+            findings.append(
+                f"Config snapshot redaction for env.*/skills.env.* keys: "
+                f"active in this version."
+            )
+
+    except Exception as e:
+        warnings.append(f"OpenClaw 2026.2.23 version gate check failed: {str(e)}")
+
+    return {
+        "category": "openclaw_version_gate_223",
+        "findings": findings,
+        "warnings": warnings,
+        "critical": critical,
+    }
+
+
 def generate_security_report(scan_results: List[Dict[str, Any]]) -> str:
     """
     Generate a Telegram-formatted security report from scan results.
@@ -2384,6 +2676,9 @@ def run_security_scan(level: str = 'light') -> Dict[str, Any]:
             scan_results.append(check_dangerous_config_flags())
             scan_results.append(check_insecure_ws_connections())
             scan_results.append(check_openclaw_version_gate())
+            # 2026.2.23: SSRF legacy key and version gate run in light mode
+            scan_results.append(check_ssrf_legacy_key())
+            scan_results.append(check_openclaw_version_gate_223())
 
         elif level == 'full':
             # Full scan - all checks
@@ -2405,6 +2700,10 @@ def run_security_scan(level: str = 'light') -> Dict[str, Any]:
             scan_results.append(check_insecure_ws_connections())
             scan_results.append(check_open_group_policies())
             scan_results.append(check_openclaw_version_gate())
+            # 2026.2.23: New security checks
+            scan_results.append(check_ssrf_legacy_key())
+            scan_results.append(check_hsts_missing_for_public_gateway())
+            scan_results.append(check_openclaw_version_gate_223())
         
         # Update scan timestamps
         state = load_state()

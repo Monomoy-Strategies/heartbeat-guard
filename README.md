@@ -4,7 +4,7 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![OpenClaw Compatible](https://img.shields.io/badge/OpenClaw-2026.2.22%2B-orange.svg)](https://openclaw.com)
+[![OpenClaw Compatible](https://img.shields.io/badge/OpenClaw-2026.2.23%2B-orange.svg)](https://openclaw.com)
 [![Built by Monomoy Strategies](https://img.shields.io/badge/Built%20by-Monomoy%20Strategies-red.svg)](https://monomoystrategies.com)
 
 **Your AI Agent's Security Watchdog** 🛡️
@@ -13,7 +13,7 @@ HeartbeatGuard is a comprehensive security monitoring system designed specifical
 
 ## 🚀 Features
 
-HeartbeatGuard performs **22 core security checks**:
+HeartbeatGuard performs **25 core security checks**:
 
 1. **💻 System Health Monitoring** - CPU, memory, disk, and load tracking
 2. **🔥 Firewall Status Monitoring** - Real-time firewall rule analysis and breach detection
@@ -40,6 +40,12 @@ HeartbeatGuard performs **22 core security checks**:
 20. **🔢 OpenClaw Version Gate** — Flags installs below 2026.2.22 due to unpatched exec env injection, shell bypass, and symlink escape vulnerabilities (MEDIUM)
 21. **🔑 Credential Leakage in Config** — Warns when pre-2026.2.22 debug serialization may expose API keys in logs (MEDIUM)
 22. **⚡ IPv4/IPv6 Rate Limit Bypass** — Flags dual-stack gateway configs on pre-2026.2.22 installs vulnerable to rate limit evasion (MEDIUM)
+
+### 🆕 OpenClaw 2026.2.23 Security Checks (v1.3.0+)
+
+23. **🚫 SSRF Legacy Key Detection** — Detects stale `browser.ssrfPolicy.allowPrivateNetwork: true` (renamed to `dangerouslyAllowPrivateNetwork` in 2026.2.23); users who haven't run `openclaw doctor --fix` have silently broken SSRF protection (CRITICAL)
+24. **🔒 HSTS Missing for Public Gateway** — Flags public-facing HTTPS gateways where `gateway.http.securityHeaders.strictTransportSecurity` is not configured; new optional hardening added in 2026.2.23 (MEDIUM)
+25. **🔢 OpenClaw 2026.2.23 Version Gate** — Flags installs below 2026.2.23 for the SSRF policy default change and the config snapshot redaction bypass (env.*/skills.env.* keys exposed in pre-2026.2.23 debug logs) (MEDIUM)
 
 ## 📦 Installation
 
@@ -146,11 +152,12 @@ Configuration file location: `~/clawd/data/heartbeat-guard-config.json`
 
 | OpenClaw Version | HeartbeatGuard Support | Notes |
 |-----------------|----------------------|-------|
-| **2026.2.22+** | ✅ Full (all 22 checks) | **Recommended minimum** — patches exec env injection, shell bypass, symlink escape, rate limit bypass, and credential leakage |
-| 2026.2.21 – 2026.2.19 | ⚠️ Partial (checks 1–15 only) | Missing 2026.2.22 security patches — update recommended |
+| **2026.2.23+** | ✅ Full (all 25 checks) | **Recommended minimum** — SSRF policy key migration, config snapshot redaction for env.* keys |
+| **2026.2.22** | ✅ Full (checks 1–22) | Patches exec env injection, shell bypass, symlink escape, rate limit bypass, credential leakage — flagged by v1.3.0 version gate |
+| 2026.2.21 – 2026.2.19 | ⚠️ Partial (checks 1–15 only) | Missing 2026.2.22+ security patches — update recommended |
 | < 2026.2.19 | ❌ Limited | Multiple unpatched vulnerabilities — update immediately |
 
-> **⚠️ Recommendation:** Run OpenClaw **2026.2.22 or later**. Versions prior to 2026.2.22 are flagged as MEDIUM risk by HeartbeatGuard due to unpatched exec environment injection vulnerabilities, shell line-continuation bypass, and symlink escape in webhook transforms.
+> **⚠️ Recommendation:** Run OpenClaw **2026.2.23 or later**. Versions prior to 2026.2.23 are flagged by HeartbeatGuard for the SSRF policy key rename and config snapshot redaction bypass that exposes `env.*`/`skills.env.*` keys in debug logs.
 
 ## 🤖 Built for OpenClaw
 
