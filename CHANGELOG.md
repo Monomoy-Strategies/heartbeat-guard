@@ -2,6 +2,30 @@
 
 All notable changes to HeartbeatGuard are documented in this file.
 
+## [1.4.0] — 2026-02-27
+
+### Added — 2 new security checks for OpenClaw 2026.2.26
+
+#### `check_telegram_401_retry_risk()` — CRITICAL · Light + Full scan
+Detects OpenClaw installs below 2026.2.26 that have a Telegram channel configured.
+OpenClaw 2026.2.26 fixed unbounded 401 retries on Telegram's `sendChatAction` endpoint.
+On unpatched versions, every failed call retries without back-off, which triggers
+Telegram's abuse enforcement and results in **permanent bot deletion**. Flagged as
+CRITICAL when version < 2026.2.26 AND a Telegram channel is present in config.
+
+#### `check_gateway_restart_loop()` — HIGH · Light + Full scan
+Parses OpenClaw log files for gateway start/restart events within a 10-minute sliding
+window. Three or more restarts in that window is a strong indicator of a crash loop
+that can cause full service outage. Returns HIGH with restart count when threshold is
+exceeded, INFO if log files are not found, and PASS if 0-2 restarts detected.
+
+### Changed
+- Total check count updated from **25 → 27**
+- `__version__` bumped to `1.4.0`
+- Both new checks run in **light AND full** scan modes (immediate detection is critical)
+
+---
+
 ## [1.3.0] — 2026-02-24
 
 ### Added — 3 new security checks for OpenClaw 2026.2.23

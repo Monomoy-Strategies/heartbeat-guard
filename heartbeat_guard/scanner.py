@@ -2592,6 +2592,306 @@ def check_openclaw_version_gate_223() -> Dict[str, Any]:
     }
 
 
+
+# ---------------------------------------------------------------------------
+# OpenClaw 2026.2.26 Security Checks
+# These checks detect vulnerabilities patched in OpenClaw 2026.2.26 and flag
+# misconfigurations introduced or newly visible in that release.
+# ---------------------------------------------------------------------------
+
+OPENCLAW_MIN_SAFE_VERSION_226 = (2026, 2, 26)
+OPENCLAW_MIN_SAFE_VERSION_STR_226 = "2026.2.26"
+
+
+def _has_telegram_channel(configs: List[Dict[str, Any]]) -> bool:
+    """Return True if any OpenClaw config has a Telegram channel configured."""
+    for cfg in configs:
+        # Check 'channels' key (list or dict)
+        channels = cfg.get("channels") or []
+        if isinstance(channels, list):
+            for ch in channels:
+                if isinstance(ch, dict):
+                    if "telegram" in ch.get("type", "").lower():
+                        return True
+        elif isinstance(channels, dict):
+            for key, ch in channels.items():
+                if "telegram" in str(key).lower():
+                    return True
+                if isinstance(ch, dict) and "telegram" in ch.get("type", "").lower():
+                    return True
+
+        # Check top-level telegram / telegramBot / bot key
+        for top_key in ("telegram", "telegramBot", "bot"):
+            val = cfg.get(top_key)
+            if isinstance(val, dict) and val:
+                # Has a non-empty telegram block
+                return True
+
+        # Broad JSON scan — catches any nested telegram token/chat references
+        raw = json.dumps(cfg)
+        if re.search(r'"type"\s*:\s*"telegram"', raw, re.IGNORECASE):
+            return True
+
+    return False
+
+
+def check_telegram_401_retry_risk() -> Dict[str, Any]:
+    """
+    OpenClaw 2026.2.26 Check — Telegram Bot Deletion Risk (CRITICAL)
+
+    OpenClaw 2026.2.26 fixed unbounded 401 retries on Telegram's ``sendChatAction``
+    endpoint.  On earlier versions, every failed sendChatAction call retries
+    indefinitely without back-off.  Telegram's abuse enforcement will permanently
+    delete the bot token when it detects this hammering behaviour.
+
+    Flags CRITICAL when:
+      - Installed OpenClaw version < 2026.2.26   AND
+      - A Telegram channel is present in any OpenClaw config file
+
+    If version >= 2026.2.26 the check passes (fix is present).
+    If no Telegram channel is configured the risk does not apply.
+    """
+    findings = []
+    warnings = []
+    critical = []
+
+    try:
+        version = _get_openclaw_installed_version()
+        configs = _load_openclaw_configs()
+        telegram_configured = _has_telegram_channel(configs)
+
+        if version is None:
+            # Cannot determine version — warn conservatively if telegram found
+            if telegram_configured:
+                warnings.append(
+                    "Telegram 401 retry risk: Cannot determine OpenClaw version but "
+                    "a Telegram channel is configured. Versions before 2026.2.26 have "
+                    "unbounded 401 retries that can trigger bot deletion. Verify your "
+                    "installed version and upgrade to 2026.2.26+ if needed. "
+                    "Run: openclaw gateway update"
+                )
+            else:
+                findings.append(
+                    "Telegram 401 retry risk: OpenClaw version unknown and no Telegram "
+                    "channel detected — check skipped"
+                )
+            return {
+                "category": "telegram_401_retry_risk",
+                "findings": findings,
+                "warnings": warnings,
+                "critical": critical,
+            }
+
+        parsed = _parse_version(version)
+        below_226 = (parsed is None) or (parsed < OPENCLAW_MIN_SAFE_VERSION_226)
+
+        if below_226 and telegram_configured:
+            critical.append(
+                "Telegram bot deletion risk: OpenClaw versions before 2026.2.26 have "
+                "unbounded 401 retries on Telegram API calls. This can trigger Telegram "
+                "abuse enforcement and permanent bot deletion. Upgrade to 2026.2.26+ "
+                "immediately or disable the Telegram channel until upgraded. "
+                "Run: openclaw gateway update"
+            )
+        elif below_226 and not telegram_configured:
+            findings.append(
+                f"Telegram 401 retry risk: OpenClaw {version} is below 2026.2.26 but "
+                f"no Telegram channel detected — risk does not apply"
+            )
+        else:
+            # version >= 2026.2.26
+            findings.append(
+                f"Telegram 401 retry risk: OpenClaw {version} >= 2026.2.26 — "
+                f"unbounded retry bug is patched"
+            )
+            if telegram_configured:
+                findings.append("Telegram channel is configured and safe on this version")
+
+    except Exception as e:
+        warnings.append(f"Telegram 401 retry risk check failed: {str(e)}")
+
+    return {
+        "category": "telegram_401_retry_risk",
+        "findings": findings,
+        "warnings": warnings,
+        "critical": critical,
+    }
+
+
+def _find_openclaw_log_files() -> List[str]:
+    """Return candidate OpenClaw log file paths, most-specific first."""
+    home = os.path.expanduser("~")
+    appdata = os.environ.get("APPDATA", "")
+    localappdata = os.environ.get("LOCALAPPDATA", "")
+
+    candidates = []
+
+    # Environment override (highest priority)
+    env_log_dir = (
+        os.environ.get("HEARTBEAT_OPENCLAW_LOG_DIR")
+        or os.environ.get("OPENCLAW_LOG_DIR")
+    )
+    if env_log_dir:
+        log_dir = os.path.expandvars(env_log_dir)
+        candidates.extend(glob.glob(os.path.join(log_dir, "*.log")))
+        candidates.extend(glob.glob(os.path.join(log_dir, "gateway*.log")))
+        candidates.extend(glob.glob(os.path.join(log_dir, "openclaw*.log")))
+
+    # Standard locations
+    search_dirs: List[str] = []
+    if is_windows():
+        search_dirs = [
+            os.path.join(home, ".openclaw", "logs"),
+            os.path.join(appdata, "openclaw", "logs"),
+            os.path.join(localappdata, "openclaw", "logs"),
+            os.path.join(appdata, "npm", "node_modules", "openclaw", "logs"),
+        ]
+    else:
+        search_dirs = [
+            os.path.join(home, ".openclaw", "logs"),
+            "/var/log/openclaw",
+            "/usr/local/var/log/openclaw",
+        ]
+
+    for d in search_dirs:
+        if os.path.isdir(d):
+            for pattern in ("*.log", "gateway*.log", "openclaw*.log"):
+                candidates.extend(glob.glob(os.path.join(d, pattern)))
+
+    # Deduplicate, keep existing files only, sort newest first
+    seen: set = set()
+    result: List[str] = []
+    for p in candidates:
+        if p not in seen and os.path.isfile(p):
+            seen.add(p)
+            result.append(p)
+
+    result.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    return result
+
+
+def check_gateway_restart_loop() -> Dict[str, Any]:
+    """
+    OpenClaw 2026.2.26 Check — Gateway Restart Loop Detector (HIGH)
+
+    Parses OpenClaw log files for gateway start/restart events within the last
+    10 minutes.  Three or more restarts in that window is a strong indicator of
+    a crash loop that will eventually cause a full service outage.
+
+    Outcomes:
+      - 3+ restarts in last 10 min  → HIGH
+      - 0-2 restarts                → PASS
+      - Log file not found          → INFO (Cannot check restart history)
+    """
+    findings = []
+    warnings = []
+    critical = []
+
+    WINDOW_SECONDS = 600       # 10-minute sliding window
+    RESTART_THRESHOLD = 3      # alert at this many restarts
+
+    # Patterns that indicate a gateway start/restart event
+    _restart_patterns = [
+        re.compile(r'"event"\s*:\s*"(start|restart|gateway[_-]start)"', re.IGNORECASE),
+        re.compile(r'\bgateway\b.{0,30}\b(start(?:ed|ing)?|restart(?:ed|ing)?)\b', re.IGNORECASE),
+        re.compile(r'\b(start(?:ed|ing)?|restart(?:ed|ing)?)\b.{0,30}\bgateway\b', re.IGNORECASE),
+        re.compile(r'\bOpenClaw gateway (started|restarted|starting)\b', re.IGNORECASE),
+    ]
+
+    # Patterns to extract ISO-8601 or common timestamp from a log line
+    _ts_patterns = [
+        # ISO 8601 with optional ms/tz  e.g. 2026-02-26T14:05:23.456Z
+        re.compile(r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?'),
+        # Bracketed  [2026-02-26 14:05:23]
+        re.compile(r'\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]'),
+        # Plain      2026-02-26 14:05:23
+        re.compile(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})'),
+    ]
+
+    def _extract_timestamp(line: str) -> Optional[datetime]:
+        for pat in _ts_patterns:
+            m = pat.search(line)
+            if m:
+                ts_str = m.group(1).replace("T", " ")
+                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+                    try:
+                        return datetime.strptime(ts_str, fmt)
+                    except ValueError:
+                        pass
+        return None
+
+    try:
+        log_files = _find_openclaw_log_files()
+
+        if not log_files:
+            findings.append(
+                "Cannot check restart history — log file not found. "
+                "Set OPENCLAW_LOG_DIR to point to your OpenClaw log directory."
+            )
+            return {
+                "category": "gateway_restart_loop",
+                "findings": findings,
+                "warnings": warnings,
+                "critical": critical,
+            }
+
+        cutoff = datetime.now() - timedelta(seconds=WINDOW_SECONDS)
+        recent_restarts: List[str] = []  # timestamps as strings for reporting
+
+        for log_file in log_files[:5]:   # check up to 5 most-recent log files
+            try:
+                with open(log_file, "r", errors="ignore") as fh:
+                    lines = fh.readlines()
+
+                # Only scan recent tail — 2000 lines max per file
+                for line in lines[-2000:]:
+                    line = line.rstrip()
+                    if not any(pat.search(line) for pat in _restart_patterns):
+                        continue
+                    ts = _extract_timestamp(line)
+                    if ts is None:
+                        # No timestamp extractable — count it as recent if file is recent
+                        file_mtime = datetime.fromtimestamp(os.path.getmtime(log_file))
+                        if file_mtime >= cutoff:
+                            recent_restarts.append(f"(no timestamp — in {os.path.basename(log_file)})")
+                    elif ts >= cutoff:
+                        recent_restarts.append(ts.strftime("%H:%M:%S"))
+
+            except Exception:
+                continue
+
+        n = len(recent_restarts)
+
+        if n >= RESTART_THRESHOLD:
+            warnings.append(
+                f"Gateway restart loop detected: {n} restarts in the last "
+                f"{WINDOW_SECONDS // 60} minutes. This indicates a crash loop that "
+                f"may cause service outage. Check logs for root cause: look for config "
+                f"errors, port conflicts, or plugin crashes. "
+                f"Run: openclaw gateway status"
+            )
+        elif n > 0:
+            findings.append(
+                f"Gateway restart activity: {n} restart event(s) in last "
+                f"{WINDOW_SECONDS // 60} minutes (below threshold of {RESTART_THRESHOLD})"
+            )
+        else:
+            findings.append(
+                f"Gateway restart loop: No restart events detected in last "
+                f"{WINDOW_SECONDS // 60} minutes — OK"
+            )
+
+    except Exception as e:
+        warnings.append(f"Gateway restart loop check failed: {str(e)}")
+
+    return {
+        "category": "gateway_restart_loop",
+        "findings": findings,
+        "warnings": warnings,
+        "critical": critical,
+    }
+
+
 def generate_security_report(scan_results: List[Dict[str, Any]]) -> str:
     """
     Generate a Telegram-formatted security report from scan results.
@@ -2679,6 +2979,9 @@ def run_security_scan(level: str = 'light') -> Dict[str, Any]:
             # 2026.2.23: SSRF legacy key and version gate run in light mode
             scan_results.append(check_ssrf_legacy_key())
             scan_results.append(check_openclaw_version_gate_223())
+            # 2026.2.26: Telegram 401 retry risk and gateway restart loop
+            scan_results.append(check_telegram_401_retry_risk())
+            scan_results.append(check_gateway_restart_loop())
 
         elif level == 'full':
             # Full scan - all checks
@@ -2704,6 +3007,9 @@ def run_security_scan(level: str = 'light') -> Dict[str, Any]:
             scan_results.append(check_ssrf_legacy_key())
             scan_results.append(check_hsts_missing_for_public_gateway())
             scan_results.append(check_openclaw_version_gate_223())
+            # 2026.2.26: Telegram 401 retry risk and gateway restart loop
+            scan_results.append(check_telegram_401_retry_risk())
+            scan_results.append(check_gateway_restart_loop())
         
         # Update scan timestamps
         state = load_state()
