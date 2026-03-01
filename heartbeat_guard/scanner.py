@@ -25,6 +25,17 @@ from pathlib import Path
 import sqlite3
 import ipaddress
 
+# Import checks subpackage
+try:
+    from .checks import check_dm_policy_verify, check_acp_session_lifecycle
+    CHECKS_SUBPACKAGE_AVAILABLE = True
+except ImportError:
+    try:
+        from heartbeat_guard.checks import check_dm_policy_verify, check_acp_session_lifecycle
+        CHECKS_SUBPACKAGE_AVAILABLE = True
+    except ImportError:
+        CHECKS_SUBPACKAGE_AVAILABLE = False
+
 # Try to import psutil, fallback to subprocess-based methods if not available
 try:
     import psutil
@@ -2982,6 +2993,10 @@ def run_security_scan(level: str = 'light') -> Dict[str, Any]:
             # 2026.2.26: Telegram 401 retry risk and gateway restart loop
             scan_results.append(check_telegram_401_retry_risk())
             scan_results.append(check_gateway_restart_loop())
+            # Channel / session hygiene checks
+            if CHECKS_SUBPACKAGE_AVAILABLE:
+                scan_results.append(check_dm_policy_verify())
+                scan_results.append(check_acp_session_lifecycle())
 
         elif level == 'full':
             # Full scan - all checks
@@ -3010,6 +3025,10 @@ def run_security_scan(level: str = 'light') -> Dict[str, Any]:
             # 2026.2.26: Telegram 401 retry risk and gateway restart loop
             scan_results.append(check_telegram_401_retry_risk())
             scan_results.append(check_gateway_restart_loop())
+            # Channel / session hygiene checks
+            if CHECKS_SUBPACKAGE_AVAILABLE:
+                scan_results.append(check_dm_policy_verify())
+                scan_results.append(check_acp_session_lifecycle())
         
         # Update scan timestamps
         state = load_state()

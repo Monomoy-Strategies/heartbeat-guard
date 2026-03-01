@@ -60,6 +60,13 @@ from .scanner import (
     ensure_data_files
 )
 
+# Import checks subpackage
+try:
+    from .checks import check_dm_policy_verify, check_acp_session_lifecycle
+    _CHECKS_AVAILABLE = True
+except ImportError:
+    _CHECKS_AVAILABLE = False
+
 # Import security hooks for logging
 try:
     from hooks.security_hook import (
@@ -92,6 +99,11 @@ def run_individual_check(check_type: str, **kwargs):
         'outbound': check_outbound_connections,
         'tamper': check_tamper_detection
     }
+
+    # Conditionally add checks-subpackage entries
+    if _CHECKS_AVAILABLE:
+        check_functions['dm-policy'] = check_dm_policy_verify
+        check_functions['acp-sessions'] = check_acp_session_lifecycle
     
     if check_type not in check_functions:
         print(f"Error: Unknown check type '{check_type}'")
