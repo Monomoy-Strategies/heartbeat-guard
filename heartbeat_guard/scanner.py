@@ -27,11 +27,21 @@ import ipaddress
 
 # Import checks subpackage
 try:
-    from .checks import check_dm_policy_verify, check_acp_session_lifecycle
+    from .checks import (
+        check_dm_policy_verify,
+        check_acp_session_lifecycle,
+        check_config_validate,
+        check_secret_ref_audit,
+    )
     CHECKS_SUBPACKAGE_AVAILABLE = True
 except ImportError:
     try:
-        from heartbeat_guard.checks import check_dm_policy_verify, check_acp_session_lifecycle
+        from heartbeat_guard.checks import (
+            check_dm_policy_verify,
+            check_acp_session_lifecycle,
+            check_config_validate,
+            check_secret_ref_audit,
+        )
         CHECKS_SUBPACKAGE_AVAILABLE = True
     except ImportError:
         CHECKS_SUBPACKAGE_AVAILABLE = False
@@ -2997,6 +3007,9 @@ def run_security_scan(level: str = 'light') -> Dict[str, Any]:
             if CHECKS_SUBPACKAGE_AVAILABLE:
                 scan_results.append(check_dm_policy_verify())
                 scan_results.append(check_acp_session_lifecycle())
+                # 2026.3.2: Config validation and SecretRef audit
+                scan_results.append(check_config_validate())
+                scan_results.append(check_secret_ref_audit())
 
         elif level == 'full':
             # Full scan - all checks
@@ -3029,6 +3042,9 @@ def run_security_scan(level: str = 'light') -> Dict[str, Any]:
             if CHECKS_SUBPACKAGE_AVAILABLE:
                 scan_results.append(check_dm_policy_verify())
                 scan_results.append(check_acp_session_lifecycle())
+                # 2026.3.2: Config validation and SecretRef audit
+                scan_results.append(check_config_validate())
+                scan_results.append(check_secret_ref_audit())
         
         # Update scan timestamps
         state = load_state()

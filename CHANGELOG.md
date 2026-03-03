@@ -2,6 +2,23 @@
 
 All notable changes to HeartbeatGuard are documented in this file.
 
+## [1.5.0] - 2026-03-03
+
+### Added
+- `config_validate`: Runs `openclaw config validate --json` (new in OpenClaw 2026.3.2) and surfaces config errors/warnings before they cause gateway failures. CRITICAL for errors, MEDIUM for warnings.
+- `secret_ref_audit`: Audits all SecretRef usage in OpenClaw config. Flags unresolved refs on active surfaces as CRITICAL. Covers all 64 credential targets expanded in OpenClaw 2026.3.2.
+
+### Compatibility
+- Optimized for OpenClaw 2026.3.2+
+- Both checks gracefully handle pre-2026.3.2 installs (returns INFO, not false positives)
+
+### Changed
+- Total check count updated from **27 → 29**
+- `__version__` bumped to `1.5.0`
+- Both new checks run in **light AND full** scan modes (catch issues early)
+
+---
+
 ## [1.4.0] — 2026-02-27
 
 ### Added — 2 new security checks for OpenClaw 2026.2.26
