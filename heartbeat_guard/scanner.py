@@ -32,6 +32,12 @@ try:
         check_acp_session_lifecycle,
         check_config_validate,
         check_secret_ref_audit,
+        check_media_sandbox_verify,
+        check_csp_integrity,
+        check_channel_id_injection,
+        check_long_session_monitor,
+        check_cache_trace_audit,
+        check_clawhub_supply_chain,
     )
     CHECKS_SUBPACKAGE_AVAILABLE = True
 except ImportError:
@@ -41,6 +47,12 @@ except ImportError:
             check_acp_session_lifecycle,
             check_config_validate,
             check_secret_ref_audit,
+            check_media_sandbox_verify,
+            check_csp_integrity,
+            check_channel_id_injection,
+            check_long_session_monitor,
+            check_cache_trace_audit,
+            check_clawhub_supply_chain,
         )
         CHECKS_SUBPACKAGE_AVAILABLE = True
     except ImportError:
@@ -3010,6 +3022,10 @@ def run_security_scan(level: str = 'light') -> Dict[str, Any]:
                 # 2026.3.2: Config validation and SecretRef audit
                 scan_results.append(check_config_validate())
                 scan_results.append(check_secret_ref_audit())
+                # 2026.3.23-24: New security checks
+                scan_results.append(check_media_sandbox_verify())
+                scan_results.append(check_channel_id_injection())
+                scan_results.append(check_long_session_monitor())
 
         elif level == 'full':
             # Full scan - all checks
@@ -3045,7 +3061,15 @@ def run_security_scan(level: str = 'light') -> Dict[str, Any]:
                 # 2026.3.2: Config validation and SecretRef audit
                 scan_results.append(check_config_validate())
                 scan_results.append(check_secret_ref_audit())
-        
+                # 2026.3.23: CSP, channel ID, cache-trace, supply chain
+                scan_results.append(check_media_sandbox_verify())
+                scan_results.append(check_csp_integrity())
+                scan_results.append(check_channel_id_injection())
+                scan_results.append(check_cache_trace_audit())
+                scan_results.append(check_clawhub_supply_chain())
+                # 2026.3.24: Long session monitor (48h default timeout)
+                scan_results.append(check_long_session_monitor())
+
         # Update scan timestamps
         state = load_state()
         timestamp = datetime.now().isoformat()

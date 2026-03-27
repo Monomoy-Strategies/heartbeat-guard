@@ -2,6 +2,62 @@
 
 All notable changes to HeartbeatGuard are documented in this file.
 
+## [1.6.0] - 2026-03-26
+
+### Added — 6 new security checks for OpenClaw 2026.3.23 + 2026.3.24
+
+#### `check_media_sandbox_verify()` — CRITICAL · Light + Full scan
+Detects the mediaUrl/fileUrl alias bypass (CVE patched in OpenClaw 2026.3.24 #54034) that
+allowed outbound tool and message actions to escape media-root restrictions. Checks OpenClaw
+version, audits workspaceOnly/mediaRoot policy, and scans installed plugins for bypass patterns.
+Flagged as CRITICAL on pre-2026.3.24 installs.
+
+#### `check_csp_integrity()` — HIGH · Full scan only
+Verifies the gateway's Content Security Policy includes SHA-256 hashed inline scripts,
+as introduced in OpenClaw 2026.3.23. Checks index.html for CSP meta tags and verifies
+live gateway headers. Without CSP hash-pinning, injected inline scripts execute freely
+in the Control UI.
+
+#### `check_channel_id_injection()` — CRITICAL · Light + Full scan
+Scans OpenClaw config for channel IDs containing control characters, prototype pollution
+patterns (__proto__, constructor), path traversal sequences, or excessive length. These
+patterns can bypass auth, corrupt JavaScript runtime state, or inject data into audit paths.
+Hardened in OpenClaw 2026.3.23.
+
+#### `check_long_session_monitor()` — CRITICAL · Light + Full scan
+Monitors for agent sessions running beyond configurable thresholds (default: >6h WARN,
+>12h HIGH, >24h CRITICAL). OpenClaw 2026.3.24 raised the default agent timeout from
+600s to 48 hours — compromised agents now have a much larger persistence window.
+Also checks process table for long-running openclaw processes.
+
+#### `check_cache_trace_audit()` — CRITICAL · Full scan only
+Scans cache-trace JSONL files for leaked credentials from pre-2026.3.23 OpenClaw installs.
+The 2026.3.23 release strips credential fields from trace output, but existing files may
+still contain plaintext API keys and tokens. Checks file permissions and scans for known
+credential patterns.
+
+#### `check_clawhub_supply_chain()` — HIGH · Full scan only
+Monitors the supply chain trust boundary introduced when OpenClaw 2026.3.23 made ClawHub
+the default plugin source. Audits installed plugins for source verification, file integrity
+(hash checks against install manifest), unknown origins, and stale plugins.allow entries.
+
+### Changed
+- Total check count updated from **29 → 35**
+- `__version__` bumped to `1.6.0`
+- Light scan adds 3 new checks: media sandbox, channel ID injection, long session monitor
+- Full scan adds all 6 new checks
+- CLI `--check` supports: `media-sandbox`, `csp`, `channel-ids`, `long-sessions`, `cache-trace`, `supply-chain`
+- hbg-scan: 3 new threat signatures (SIG-006 media sandbox, SIG-007 before_dispatch hook, SIG-008 prototype pollution)
+- hbg-scan: New CHECK-5b (Hook & Dispatch Interception) detection category
+- hbg-scan signatures.json updated to v1.1.0
+
+### Compatibility
+- Optimized for OpenClaw 2026.3.23 and 2026.3.24
+- All checks gracefully handle older installs (version-aware, no false positives)
+- Version matrix: full support on 2026.3.24+, partial on 2026.3.23+, basic on 2026.3.2+
+
+---
+
 ## [1.5.0] - 2026-03-03
 
 ### Added

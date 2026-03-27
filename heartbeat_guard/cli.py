@@ -62,7 +62,16 @@ from .scanner import (
 
 # Import checks subpackage
 try:
-    from .checks import check_dm_policy_verify, check_acp_session_lifecycle
+    from .checks import (
+        check_dm_policy_verify,
+        check_acp_session_lifecycle,
+        check_media_sandbox_verify,
+        check_csp_integrity,
+        check_channel_id_injection,
+        check_long_session_monitor,
+        check_cache_trace_audit,
+        check_clawhub_supply_chain,
+    )
     _CHECKS_AVAILABLE = True
 except ImportError:
     _CHECKS_AVAILABLE = False
@@ -104,6 +113,12 @@ def run_individual_check(check_type: str, **kwargs):
     if _CHECKS_AVAILABLE:
         check_functions['dm-policy'] = check_dm_policy_verify
         check_functions['acp-sessions'] = check_acp_session_lifecycle
+        check_functions['media-sandbox'] = check_media_sandbox_verify
+        check_functions['csp'] = check_csp_integrity
+        check_functions['channel-ids'] = check_channel_id_injection
+        check_functions['long-sessions'] = check_long_session_monitor
+        check_functions['cache-trace'] = check_cache_trace_audit
+        check_functions['supply-chain'] = check_clawhub_supply_chain
     
     if check_type not in check_functions:
         print(f"Error: Unknown check type '{check_type}'")
@@ -299,9 +314,12 @@ Examples:
     
     # Individual check options
     parser.add_argument('--check', choices=[
-        'health', 'firewall', 'ports', 'ssl', 'logins', 
+        'health', 'firewall', 'ports', 'ssl', 'logins',
         'processes', 'files', 'creds', 'updates', 'anomalies',
-        'sysmon', 'audit', 'outbound', 'tamper'
+        'sysmon', 'audit', 'outbound', 'tamper',
+        'dm-policy', 'acp-sessions',
+        'media-sandbox', 'csp', 'channel-ids',
+        'long-sessions', 'cache-trace', 'supply-chain'
     ], help='Run specific security check')
     
     # SSL check domains

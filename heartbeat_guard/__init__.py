@@ -9,7 +9,7 @@ Website: https://heartbeatguard.com
 License: MIT
 """
 
-__version__ = "1.5.0"  # 2026.3.2: Added config_validate + secret_ref_audit for OpenClaw 2026.3.2
+__version__ = "1.6.0"  # 2026.3.24: Media sandbox, CSP, channel ID injection, session monitor, cache audit, supply chain
 __author__ = "Monomoy Strategies"
 __email__ = "bsifflard@monomoystrategies.com"
 
