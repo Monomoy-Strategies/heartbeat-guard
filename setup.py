@@ -71,6 +71,7 @@ setup(
     include_package_data=True,
     package_data={
         "heartbeat_guard": ["*.json", "*.md"],
+        "heartbeat_guard.dashboard": ["*.html"],
     },
     keywords=[
         "security",

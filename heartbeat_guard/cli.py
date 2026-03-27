@@ -301,15 +301,24 @@ Examples:
   %(prog)s --status                   # Show current status
   %(prog)s --report                   # Generate security report
   %(prog)s --history --days 14        # Show 14 days of security history
+  %(prog)s --dashboard                  # Launch web dashboard
+  %(prog)s --dashboard --port 9000      # Dashboard on custom port
+  %(prog)s --dashboard --full           # Dashboard with full scans
   %(prog)s --full --json              # Full scan with JSON output
         """
     )
     
+    # Dashboard
+    parser.add_argument('--dashboard', action='store_true',
+                       help='Launch the web dashboard in your browser')
+    parser.add_argument('--port', type=int, default=8765,
+                       help='Port for the dashboard server (default: 8765)')
+
     # Scan options
     scan_group = parser.add_mutually_exclusive_group()
     scan_group.add_argument('--light', action='store_true',
                            help='Run light security scan (quick checks for heartbeat)')
-    scan_group.add_argument('--full', action='store_true', 
+    scan_group.add_argument('--full', action='store_true',
                            help='Run full security scan (comprehensive)')
     
     # Individual check options
@@ -348,6 +357,12 @@ Examples:
     ensure_data_files()
     
     try:
+        if args.dashboard:
+            from .dashboard import start_dashboard
+            scan_level = 'full' if args.full else 'light'
+            start_dashboard(port=args.port, scan_level=scan_level, open_browser=True)
+            return
+
         if args.light:
             if not args.quiet:
                 print("🚀 Running light security scan...")
