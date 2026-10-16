@@ -50,7 +50,6 @@ setup(
         "psutil>=5.8.0",
         "requests>=2.25.0",
         "cryptography>=3.4.0",
-        "sqlite3-python",
     ],
     extras_require={
         "dev": [
